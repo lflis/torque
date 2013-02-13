@@ -7,7 +7,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <time.h>
-
+#include <sys/socket.h>
 
 
 ssize_t write_nonblocking_socket(
@@ -20,7 +20,30 @@ ssize_t write_nonblocking_socket(
   ssize_t i;
   time_t  start, now;
 
+  /* FIXME: LF: this was hardcoded here for a long time, */
+  /*         shouldn't it be tcp_timeout from server/mom configuration? */
+  int timeout = 30;
+
   /* NOTE:  under some circumstances, a blocking fd will be passed */
+
+  /* LF: if blocking fd is passed - in some cases it may cause server to hang for a long time.
+     to fix this we introduce socket timeout */
+
+  struct timeval send_timeout, send_timeout_orig;
+
+  int errval, tv_size; 
+  int tm_set = 0; // timeout modification flag; false by default
+
+
+  send_timeout.tv_sec = timeout;
+  send_timeout.tv_usec = 0;
+
+  /* try to store socket timeout value and set new timeout if possible */
+  if (getsockopt(fd,SOL_SOCKET, SO_SNDTIMEO,(void *) &send_timeout_orig, (socklen_t *) &tv_size) == 0)
+  {
+     if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, (void *) &send_timeout, sizeof(send_timeout)) == 0)
+       tm_set = 1; // socket timeout modified
+  }
 
   /* Set a timer to prevent an infinite loop here. */
   time(&now);
@@ -29,27 +52,37 @@ ssize_t write_nonblocking_socket(
   for (;;)
     {
     i = write(fd, buf, count);
+    /* save errno for write */
+    errval = errno;
 
     if (i >= 0)
       {
       /* successfully wrote 'i' bytes */
-
+      /* restore timeout, errno is not relevant for rc > -1 */
+      if (tm_set)
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, (void *) &send_timeout_orig, sizeof(send_timeout_orig));
       return(i);
       }
 
     if (errno != EAGAIN)
       {
       /* write failed */
-
+      if(tm_set)
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, (void *) &send_timeout_orig, sizeof(send_timeout_orig));
+      errno = errval;
       return(i);
       }
 
 
     time(&now);
-    if ((now - start) > 30)
+    if ((now - start) > timeout)
       {
       /* timed out */
 
+      /* restore send timeout and set errno from write */
+      if(tm_set)
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, (void *) &send_timeout_orig, sizeof(send_timeout_orig));
+      errno = errval; // which is EAGAIN
       return(i);
       }
     }    /* END for () */

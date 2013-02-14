@@ -390,10 +390,51 @@ AC_CHECK_HEADERS([security/pam_modules.h], [], [],
 ])
 
 
+dnl 
+dnl #######################################################################
+dnl Check for ability to set SO_SNDTIMEO with setsockopt
+dnl
+AC_MSG_CHECKING([for SO_SNDTIMEO support])
+AC_RUN_IFELSE(
+     [AC_LANG_PROGRAM([[
 
+#include <sys/time.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <stdio.h>
+#include <errno.h>
+ ]], [[
 
+struct timeval tv;
+tv.tv_sec=0;
+tv.tv_usec=200;
+int fd,tv_len,rc;
+fd = socket(AF_INET,SOCK_STREAM,0);
 
+if(setsockopt(fd,SOL_SOCKET,SO_SNDTIMEO,&tv,sizeof(tv)) == 0)
+{
 
+   tv_len = sizeof(tv);
+   rc = getsockopt(fd,SOL_SOCKET,SO_SNDTIMEO,&tv, (socklen_t *) &tv_len);
+   if (rc == 0) 
+     return 0;
+   else 
+     return 1;
+
+} else
+{
+   return 1;
+}
+// not reached
+return 1;
+
+  ]])], [ac_cv_so_sndtimeo_works=yes], [ac_cv_so_sndtimeo_works=no ])
+  
+
+if test "$ac_cv_so_sndtimeo_works" = "yes"; then
+   AC_DEFINE([HAVE_SO_SNDTIMEO], [1], [Define if SO_SNDTIMEO works])
+fi;
+AC_MSG_RESULT([$ac_cv_so_sndtimeo_works])
 
 dnl
 dnl  ######################################################################

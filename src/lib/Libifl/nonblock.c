@@ -79,7 +79,7 @@ ssize_t write_nonblocking_socket(
 
 
     time(&now);
-    if ((now - start) > timeout)
+    if ((now - start) >= timeout)
       {
       /* timed out */
       break;

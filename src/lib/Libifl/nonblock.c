@@ -14,6 +14,10 @@
 
 #undef write
 
+
+/* LF: undefine write() to prevent loop-forever issue as write is redefined in pbs_config.h */
+#undef read
+
 ssize_t write_nonblocking_socket(
 
   int     fd,
